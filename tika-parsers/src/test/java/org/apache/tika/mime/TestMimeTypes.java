@@ -501,10 +501,17 @@ public class TestMimeTypes {
 
     @Test
     public void testPdfDetection() throws Exception {
-        assertType("application/pdf", "testPDF.pdf");
-        assertTypeByData("application/pdf", "testPDF.pdf");
+        // PDF extension by name is enough
         assertTypeByName("application/pdf", "x.pdf");
         assertTypeByName("application/pdf", "x.PDF");
+
+        // For normal PDFs, can get by name or data or both
+        assertType("application/pdf", "testPDF.pdf");
+        assertTypeByData("application/pdf", "testPDF.pdf");
+
+        // PDF with a BoM works both ways too
+        assertType("application/pdf", "testPDF_bom.pdf");
+        assertTypeByData("application/pdf", "testPDF_bom.pdf");
     }
 
     @Test
@@ -905,6 +912,48 @@ public class TestMimeTypes {
                 "application/x-berkeley-db; format=hash; version=5", 
                 "testBDB_hash_5.db");
     }
+    
+    /**
+     * CBOR typically contains HTML
+     */
+    @Test
+    public void testCBOR() throws IOException {
+        assertTypeByNameAndData("application/cbor", "NUTCH-1997.cbor");
+        assertTypeByData("application/cbor", "NUTCH-1997.cbor");
+    }
+    
+    @Test
+    public void testZLIB() throws IOException {
+        // ZLIB encoded versions of testTXT.txt
+        assertTypeByData("application/zlib", "testTXT.zlib");
+        assertTypeByData("application/zlib", "testTXT.zlib0");
+        assertTypeByData("application/zlib", "testTXT.zlib5");
+        assertTypeByData("application/zlib", "testTXT.zlib9");
+    }
+    
+    @Test
+    public void testTextFormats() throws Exception {
+        assertType("application/x-bibtex-text-file", "testBIBTEX.bib");
+        assertTypeByData("application/x-bibtex-text-file", "testBIBTEX.bib");
+    }
+    
+    @Test
+    public void testCodeFormats() throws Exception {
+        assertType("text/x-csrc", "testC.c");
+        assertType("text/x-chdr", "testH.h");
+        assertTypeByData("text/x-csrc", "testC.c");
+        assertTypeByData("text/x-chdr", "testH.h");
+        
+        assertTypeByName("text/x-java-source", "testJAVA.java");
+        assertType("text/x-java-properties", "testJAVAPROPS.properties");
+        
+        assertType("text/x-matlab", "testMATLAB.m");
+        assertType("text/x-matlab", "testMATLAB_wtsgaus.m");
+        assertType("text/x-matlab", "testMATLAB_barcast.m");
+        assertTypeByData("text/x-matlab", "testMATLAB.m");
+        assertTypeByData("text/x-matlab", "testMATLAB_wtsgaus.m");
+        assertTypeByData("text/x-matlab", "testMATLAB_barcast.m");
+    }
 
     private void assertText(byte[] prefix) throws IOException {
         assertMagic("text/plain", prefix);
@@ -924,6 +973,7 @@ public class TestMimeTypes {
     private void assertType(String expected, String filename) throws Exception {
         InputStream stream = TestMimeTypes.class.getResourceAsStream(
                 "/test-documents/" + filename);
+        assertNotNull("Test file not found: " + filename, stream);
         try {
             Metadata metadata = new Metadata();
             metadata.set(Metadata.RESOURCE_NAME_KEY, filename);

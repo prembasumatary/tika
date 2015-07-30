@@ -20,8 +20,18 @@ package org.apache.tika.batch;
 import org.apache.tika.config.TikaConfig;
 import org.apache.tika.parser.Parser;
 
-public interface ParserFactory {
-  
-  public Parser getParser(TikaConfig config);
+public abstract class ParserFactory {
+
+    private boolean parseRecursively = true;
+
+    public abstract Parser getParser(TikaConfig config);
+
+    public boolean getParseRecursively() {
+        return parseRecursively;
+    }
+
+    public void setParseRecursively(boolean parseRecursively) {
+        this.parseRecursively = parseRecursively;
+    }
 
 }

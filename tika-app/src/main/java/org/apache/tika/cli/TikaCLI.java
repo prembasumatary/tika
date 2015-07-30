@@ -21,7 +21,6 @@ import javax.xml.transform.TransformerConfigurationException;
 import javax.xml.transform.sax.SAXTransformerFactory;
 import javax.xml.transform.sax.TransformerHandler;
 import javax.xml.transform.stream.StreamResult;
-
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
@@ -43,6 +42,7 @@ import java.net.URL;
 import java.nio.charset.Charset;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -54,18 +54,16 @@ import java.util.TreeSet;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.log4j.BasicConfigurator;
 import org.apache.log4j.Level;
+import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
-import org.apache.log4j.SimpleLayout;
-import org.apache.log4j.WriterAppender;
+import org.apache.log4j.PropertyConfigurator;
 import org.apache.poi.poifs.filesystem.DirectoryEntry;
 import org.apache.poi.poifs.filesystem.DocumentEntry;
 import org.apache.poi.poifs.filesystem.DocumentInputStream;
 import org.apache.poi.poifs.filesystem.POIFSFileSystem;
 import org.apache.tika.Tika;
 import org.apache.tika.batch.BatchProcessDriverCLI;
-import org.apache.tika.batch.fs.FSBatchProcessCLI;
 import org.apache.tika.config.TikaConfig;
 import org.apache.tika.detect.CompositeDetector;
 import org.apache.tika.detect.DefaultDetector;
@@ -90,6 +88,7 @@ import org.apache.tika.mime.MimeTypeException;
 import org.apache.tika.mime.MimeTypes;
 import org.apache.tika.parser.AutoDetectParser;
 import org.apache.tika.parser.CompositeParser;
+import org.apache.tika.parser.DigestingParser;
 import org.apache.tika.parser.NetworkParser;
 import org.apache.tika.parser.ParseContext;
 import org.apache.tika.parser.Parser;
@@ -97,6 +96,7 @@ import org.apache.tika.parser.ParserDecorator;
 import org.apache.tika.parser.PasswordProvider;
 import org.apache.tika.parser.RecursiveParserWrapper;
 import org.apache.tika.parser.html.BoilerpipeContentHandler;
+import org.apache.tika.parser.utils.CommonsDigester;
 import org.apache.tika.sax.BasicContentHandlerFactory;
 import org.apache.tika.sax.BodyContentHandler;
 import org.apache.tika.sax.ContentHandlerFactory;
@@ -110,15 +110,21 @@ import org.xml.sax.helpers.DefaultHandler;
  * Simple command line interface for Apache Tika.
  */
 public class TikaCLI {
+
+    private final int MAX_MARK = 20*1024*1024;//20MB
+
     private File extractDir = new File(".");
 
     private static final Log logger = LogFactory.getLog(TikaCLI.class);
 
     public static void main(String[] args) throws Exception {
+
         TikaCLI cli = new TikaCLI();
+        if (! isConfigured()) {
+            PropertyConfigurator.configure(cli.getClass().getResourceAsStream("/log4j.properties"));
+        }
 
         if (cli.testForHelp(args)) {
-            FSBatchProcessCLI batchProcessCLI = new FSBatchProcessCLI(args);
             cli.usage();
             return;
         } else if (cli.testForBatch(args)) {
@@ -127,10 +133,6 @@ public class TikaCLI {
             batchDriver.execute();
             return;
         }
-
-        BasicConfigurator.configure(
-                new WriterAppender(new SimpleLayout(), System.err));
-        Logger.getRootLogger().setLevel(Level.INFO);
 
         if (args.length > 0) {
             for (int i = 0; i < args.length; i++) {
@@ -154,6 +156,22 @@ public class TikaCLI {
         }
     }
 
+    private static boolean isConfigured() {
+        //Borrowed from: http://wiki.apache.org/logging-log4j/UsefulCode
+        Enumeration appenders = LogManager.getRootLogger().getAllAppenders();
+        if (appenders.hasMoreElements()) {
+            return true;
+        }
+        else {
+            Enumeration loggers = LogManager.getCurrentLoggers() ;
+            while (loggers.hasMoreElements()) {
+                Logger c = (Logger) loggers.nextElement();
+                if (c.getAllAppenders().hasMoreElements())
+                    return true;
+            }
+        }
+        return false;
+    }
     private class OutputType {
 
         public void process(
@@ -321,6 +339,8 @@ public class TikaCLI {
      */
     private String password = System.getenv("TIKA_PASSWORD");
 
+    private DigestingParser.Digester digester = null;
+
     private boolean pipeMode = true;
 
     private boolean serverMode = false;
@@ -387,6 +407,11 @@ public class TikaCLI {
             fork = true;
         } else if (arg.startsWith("--config=")) {
             configure(arg.substring("--config=".length()));
+        } else if (arg.startsWith("--digest=")) {
+            CommonsDigester.DigestAlgorithm[] algos = CommonsDigester.parse(
+                    arg.substring("--digest=".length()));
+            digester = new CommonsDigester(MAX_MARK,algos);
+            parser = new DigestingParser(parser, digester);
         } else if (arg.startsWith("-e")) {
             encoding = arg.substring("-e".length());
         } else if (arg.startsWith("--encoding=")) {
@@ -532,6 +557,8 @@ public class TikaCLI {
         out.println("                           with -x, -h, -t or -m; default is -x)");
         out.println("    -l  or --language      Output only language");
         out.println("    -d  or --detect        Detect document type");
+        out.println("           --digest=X      Include digest X (md2, md5, sha1,");
+        out.println("                               sha256, sha384, sha512");
         out.println("    -eX or --encoding=X    Use output encoding X");
         out.println("    -pX or --password=X    Use document password X");
         out.println("    -z  or --extract       Extract all attachements into current directory");
@@ -587,7 +614,7 @@ public class TikaCLI {
         out.println();
         out.println("    Simplest method.");
         out.println("    Specify two directories as args with no other args:");
-        out.println("         java -jar tika-app.jar <inputDirectory> <outputDirectory");
+        out.println("         java -jar tika-app.jar <inputDirectory> <outputDirectory>");
         out.println();
         out.println("Batch Options:");
         out.println("    -i  or --inputDir          Input directory");
@@ -610,7 +637,6 @@ public class TikaCLI {
         out.println();
         out.println("    To modify child process jvm args, prepend \"J\" as in:");
         out.println("    -JXmx4g or -JDlog4j.configuration=file:log4j.xml.");
-
     }
 
     private void version() {
@@ -650,6 +676,9 @@ public class TikaCLI {
         this.configFilePath = configFilePath;
         TikaConfig config = new TikaConfig(new File(configFilePath));
         parser = new AutoDetectParser(config);
+        if (digester != null) {
+            parser = new DigestingParser(parser, digester);
+        }
         detector = config.getDetector();
         context.set(Parser.class, parser);
     }
@@ -690,12 +719,20 @@ public class TikaCLI {
     }
      
     private void displayParser(Parser p, boolean includeMimeTypes, boolean apt, int i) {
+        String decorated = null;
+        if (p instanceof ParserDecorator) {
+            ParserDecorator pd = (ParserDecorator)p;
+            decorated = " (Wrapped by " + pd.getDecorationName() + ")";
+            p = pd.getWrappedParser();
+        }
+        
         boolean isComposite = (p instanceof CompositeParser);
-        String name = (p instanceof ParserDecorator) ?
-                      ((ParserDecorator) p).getWrappedParser().getClass().getName() :
-                      p.getClass().getName();
-        if (apt){
+        String name = p.getClass().getName();
+                      
+        if (apt) {
             name = name.substring(0, name.lastIndexOf(".") + 1) + "{{{./api/" + name.replace(".", "/") + "}" + name.substring(name.lastIndexOf(".") + 1) + "}}";
+        } else if (decorated != null) {
+            name += decorated;
         }
         if ((apt && !isComposite) || !apt) {    // Don't display Composite parsers in the apt output.
             System.out.println(indent(i) + ((apt) ? "* " : "") + name + (isComposite ? " (Composite Parser):" : ""));

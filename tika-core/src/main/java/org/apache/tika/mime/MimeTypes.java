@@ -71,7 +71,7 @@ public final class MimeTypes implements Detector, Serializable {
     public static final String PLAIN_TEXT = "text/plain";
     
     /**
-     * Name of the {@link #xml xml} type, application/xml.
+     * Name of the {@link #xmlMimeType xml} type, application/xml.
      */
     public static final String XML = "application/xml";
 
@@ -172,7 +172,7 @@ public final class MimeTypes implements Detector, Serializable {
      * @param data first few bytes of a document stream
      * @return matching MIME type
      */
-    private List<MimeType> getMimeType(byte[] data) {
+    List<MimeType> getMimeType(byte[] data) {
         if (data == null) {
             throw new IllegalArgumentException("Data is missing");
         } else if (data.length == 0) {
@@ -247,7 +247,7 @@ public final class MimeTypes implements Detector, Serializable {
      * @return first {@link #getMinLength()} (or fewer) bytes of the stream
      * @throws IOException if the stream can not be read
      */
-    private byte[] readMagicHeader(InputStream stream) throws IOException {
+    byte[] readMagicHeader(InputStream stream) throws IOException {
         if (stream == null) {
             throw new IllegalArgumentException("InputStream is missing");
         }
@@ -303,20 +303,37 @@ public final class MimeTypes implements Detector, Serializable {
     }
 
     /**
-     * Returns the registered media type with the given name (or alias).
+     * Returns the registered, normalised media type with the given name (or alias).
      * 
-     * Unlike {@link #forName(String)}, this function will *not* create a new
-     * MimeType and register it
+     * <p>Unlike {@link #forName(String)}, this function will <em>not<em> create a 
+     * new MimeType and register it. Instead, <code>null</code> will be returned if 
+     * there is no definition available for the given name.
+     *
+     * <p>Also, unlike {@link #forName(String)}, this function may return a
+     * mime type that has fewer parameters than were included in the supplied name.
+     * If the registered mime type has parameters (e.g. 
+     * <code>application/dita+xml;format=map</code>), then those will be maintained.  
+     * However, if the supplied name has paramenters that the <em>registered</em> mime
+     * type does not (e.g. <code>application/xml; charset=UTF-8</code> as a name, 
+     * compared to just <code>application/xml</code> for the type in the registry), 
+     * then those parameters will not be included in the returned type.
      *
      * @param name media type name (case-insensitive)
-     * @return the registered media type with the given name or alias
+     * @return the registered media type with the given name or alias, or null if not found
      * @throws MimeTypeException if the given media type name is invalid
      */
     public MimeType getRegisteredMimeType(String name) throws MimeTypeException {
         MediaType type = MediaType.parse(name);
         if (type != null) {
             MediaType normalisedType = registry.normalize(type);
-            return types.get(normalisedType);
+            MimeType candidate = types.get(normalisedType);
+            if (candidate != null) {
+                return candidate;
+            }
+            if (normalisedType.hasParameters()) {
+                return types.get(normalisedType.getBaseType());
+            }
+            return null;
         } else {
             throw new MimeTypeException("Invalid media type name: " + name);
         }
@@ -546,7 +563,7 @@ public final class MimeTypes implements Detector, Serializable {
      * Get the default MimeTypes. This includes all the built-in
      * media types, and any custom override ones present.
      * 
-     * @param ClassLoader to use, if not the default
+     * @param classLoader to use, if not the default
      * @return MimeTypes default type registry
      */
     public static synchronized MimeTypes getDefaultMimeTypes(ClassLoader classLoader) {

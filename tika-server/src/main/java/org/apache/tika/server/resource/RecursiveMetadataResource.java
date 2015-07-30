@@ -27,30 +27,22 @@ import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.MultivaluedMap;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.UriInfo;
-
 import java.io.InputStream;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.cxf.jaxrs.ext.multipart.Attachment;
-import org.apache.tika.config.TikaConfig;
+import org.apache.tika.language.ProfilingHandler;
 import org.apache.tika.metadata.Metadata;
-import org.apache.tika.parser.AutoDetectParser;
 import org.apache.tika.parser.ParseContext;
+import org.apache.tika.parser.Parser;
 import org.apache.tika.parser.RecursiveParserWrapper;
 import org.apache.tika.sax.BasicContentHandlerFactory;
 import org.apache.tika.server.MetadataList;
-import org.xml.sax.helpers.DefaultHandler;
 
 @Path("/rmeta")
 public class RecursiveMetadataResource {
     private static final Log logger = LogFactory.getLog(RecursiveMetadataResource.class);
-
-    private TikaConfig tikaConfig;
-
-    public RecursiveMetadataResource(TikaConfig tikaConfig) {
-        this.tikaConfig = tikaConfig;
-    }
 
     @POST
     @Consumes("multipart/form-data")
@@ -68,20 +60,26 @@ public class RecursiveMetadataResource {
                 parseMetadata(is, httpHeaders.getRequestHeaders(), info)).build();
     }
 
-    private MetadataList parseMetadata(InputStream is,
-                                       MultivaluedMap<String, String> httpHeaders, UriInfo info) throws Exception {
-        final Metadata metadata = new Metadata();
-        final ParseContext context = new ParseContext();
-        AutoDetectParser parser = TikaResource.createParser(tikaConfig);
-        //TODO: parameterize choice of handler and max chars?
-        BasicContentHandlerFactory.HANDLER_TYPE type = BasicContentHandlerFactory.HANDLER_TYPE.TEXT;
-        RecursiveParserWrapper wrapper = new RecursiveParserWrapper(parser,
-                new BasicContentHandlerFactory(type, -1));
-        TikaResource.fillMetadata(parser, metadata, context, httpHeaders);
-        //no need to add parser to parse recursively
-        TikaResource.fillParseContext(context, httpHeaders, null);
-        TikaResource.logRequest(logger, info, metadata);
-        TikaResource.parse(wrapper, logger, info.getPath(), is, new DefaultHandler(), metadata, context);
-        return new MetadataList(wrapper.getMetadata());
-    }
+	private MetadataList parseMetadata(InputStream is,
+			MultivaluedMap<String, String> httpHeaders, UriInfo info)
+			throws Exception {
+		final Metadata metadata = new Metadata();
+		final ParseContext context = new ParseContext();
+		Parser parser = TikaResource.createParser();
+		// TODO: parameterize choice of handler and max chars?
+		BasicContentHandlerFactory.HANDLER_TYPE type = BasicContentHandlerFactory.HANDLER_TYPE.TEXT;
+		RecursiveParserWrapper wrapper = new RecursiveParserWrapper(parser,
+				new BasicContentHandlerFactory(type, -1));
+		TikaResource.fillMetadata(parser, metadata, context, httpHeaders);
+		// no need to add parser to parse recursively
+		TikaResource.fillParseContext(context, httpHeaders, null);
+		TikaResource.logRequest(logger, info, metadata);
+		TikaResource.parse(wrapper, logger, info.getPath(), is,
+				new ProfilingHandler() {
+					public void endDocument() {
+						metadata.set("language", getLanguage().getLanguage());
+					}
+				}, metadata, context);
+		return new MetadataList(wrapper.getMetadata());
+	}
 }

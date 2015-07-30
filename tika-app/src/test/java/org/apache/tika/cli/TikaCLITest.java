@@ -16,26 +16,17 @@
  */
 package org.apache.tika.cli;
 
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.io.PrintStream;
-import java.io.Reader;
 import java.net.URI;
-import java.util.List;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.tika.exception.TikaException;
 import org.apache.tika.io.IOUtils;
-import org.apache.tika.metadata.Metadata;
-import org.apache.tika.metadata.serialization.JsonMetadataList;
-import org.apache.tika.parser.RecursiveParserWrapper;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -109,6 +100,12 @@ public class TikaCLITest {
         String[] params = {"-x", resourcePrefix + "alice.cli.test"};
         TikaCLI.main(params);
         assertTrue(outContent.toString(IOUtils.UTF_8.name()).contains("?xml version=\"1.0\" encoding=\"UTF-8\"?"));
+
+        params = new String[]{"-x", "--digest=SHA256", resourcePrefix + "alice.cli.test"};
+        TikaCLI.main(params);
+        assertTrue(outContent.toString(IOUtils.UTF_8.name())
+                .contains("<meta name=\"X-TIKA:digest:SHA256\" content=\"e90779adbac09c4ee"));
+
     }
 
     /**
@@ -123,6 +120,11 @@ public class TikaCLITest {
         assertTrue(outContent.toString("UTF-8").contains("html xmlns=\"http://www.w3.org/1999/xhtml"));
         assertTrue("Expanded <title></title> element should be present",
                 outContent.toString(IOUtils.UTF_8.name()).contains("<title></title>"));
+
+        params = new String[]{"-h", "--digest=SHA384", resourcePrefix + "alice.cli.test"};
+        TikaCLI.main(params);
+        assertTrue(outContent.toString("UTF-8")
+                .contains("<meta name=\"X-TIKA:digest:SHA384\" content=\"c69ea023f5da95a026"));
     }
 
     /**
@@ -146,6 +148,12 @@ public class TikaCLITest {
         String[] params = {"-m", resourcePrefix + "alice.cli.test"};
         TikaCLI.main(params);
         assertTrue(outContent.toString(IOUtils.UTF_8.name()).contains("text/plain"));
+
+        params = new String[]{"-m", "--digest=SHA512", resourcePrefix + "alice.cli.test"};
+        TikaCLI.main(params);
+        assertTrue(outContent.toString(IOUtils.UTF_8.name()).contains("text/plain"));
+        assertTrue(outContent.toString(IOUtils.UTF_8.name())
+                .contains("X-TIKA:digest:SHA512: dd459d99bc19ff78fd31fbae46e0"));
     }
 
     /**
@@ -155,7 +163,7 @@ public class TikaCLITest {
      */
     @Test
     public void testJsonMetadataOutput() throws Exception {
-        String[] params = {"--json", resourcePrefix + "testJsonMultipleInts.html"};
+        String[] params = {"--json", "--digest=MD2", resourcePrefix + "testJsonMultipleInts.html"};
         TikaCLI.main(params);
         String json = outContent.toString(IOUtils.UTF_8.name());
         //TIKA-1310
@@ -167,6 +175,7 @@ public class TikaCLITest {
         int title = json.indexOf("\"title\"");
         assertTrue(enc > -1 && fb > -1 && enc < fb);
         assertTrue (fb > -1 && title > -1 && fb < title);
+        assertTrue(json.contains("\"X-TIKA:digest:MD2\":"));
     }
 
     /**
@@ -366,7 +375,7 @@ public class TikaCLITest {
                 "    \"Application-Version\": \"15.0000\",\n" +
                 "    \"Character Count\": \"28\",\n" +
                 "    \"Character-Count-With-Spaces\": \"31\","));
-        assertTrue(content.contains("\"X-TIKA:embedded_resource_path\": \"test_recursive_embedded.docx/embed1.zip\""));
+        assertTrue(content.contains("\"X-TIKA:embedded_resource_path\": \"/embed1.zip\""));
         assertFalse(content.contains("X-TIKA:content"));
 
     }
@@ -389,95 +398,12 @@ public class TikaCLITest {
     }
 
     @Test
-    public void testSimplestBatchIntegration() throws Exception {
-        File tempDir = File.createTempFile("tika-cli-test-batch-", "");
-        tempDir.delete();
-        tempDir.mkdir();
-        ByteArrayOutputStream outBuffer = new ByteArrayOutputStream();
-        PrintStream writer = new PrintStream(outBuffer, true, IOUtils.UTF_8.name());
-        OutputStream os = System.out;
-        System.setOut(writer);
-        try {
-            String[] params = {escape(testDataFile.getAbsolutePath()),
-                    escape(tempDir.getAbsolutePath())};
-            TikaCLI.main(params);
-
-            StringBuffer allFiles = new StringBuffer();
-            assertTrue("bad_xml.xml.xml", new File(tempDir, "bad_xml.xml.xml").isFile());
-            assertTrue("coffee.xls.xml", new File(tempDir, "coffee.xls.xml").exists());
-        } finally {
-            //reset in case something went horribly wrong
-            System.setOut(new PrintStream(os, true, IOUtils.UTF_8.name()));
-            FileUtils.deleteDirectory(tempDir);
-        }
+    public void testDigestInJson() throws Exception {
+        String[] params = new String[]{"-J", "-r", "-t", "--digest=MD5", resourcePrefix+"test_recursive_embedded.docx"};
+        TikaCLI.main(params);
+        String content = outContent.toString(IOUtils.UTF_8.name());
+        assertTrue(content.contains("\"X-TIKA:digest:MD5\": \"59f626e09a8c16ab6dbc2800c685f772\","));
+        assertTrue(content.contains("\"X-TIKA:digest:MD5\": \"f9627095ef86c482e61d99f0cc1cf87d\""));
     }
 
-    @Test
-    public void testBasicBatchIntegration() throws Exception {
-        File tempDir = File.createTempFile("tika-cli-test-batch-", "");
-        tempDir.delete();
-        tempDir.mkdir();
-        ByteArrayOutputStream outBuffer = new ByteArrayOutputStream();
-        PrintStream writer = new PrintStream(outBuffer, true, IOUtils.UTF_8.name());
-        OutputStream os = System.out;
-        System.setOut(writer);
-        try {
-            String[] params = {"-i", escape(testDataFile.getAbsolutePath()),
-                    "-o", escape(tempDir.getAbsolutePath()),
-                    "-numConsumers", "2",
-                    "-reporterSleepMillis", "100"};//report often to make sure
-            TikaCLI.main(params);
-
-            StringBuffer allFiles = new StringBuffer();
-            assertTrue("bad_xml.xml.xml", new File(tempDir, "bad_xml.xml.xml").isFile());
-            assertTrue("coffee.xls.xml", new File(tempDir, "coffee.xls.xml").exists());
-            String sysOutString = new String(outBuffer.toByteArray(), IOUtils.UTF_8);
-
-            assertEquals(-1, sysOutString.indexOf("There are 3 file processors still active"));
-            assertTrue(sysOutString.indexOf("There are 2 file processors") > -1);
-        } finally {
-            //reset in case something went horribly wrong
-            System.setOut(new PrintStream(os, true, IOUtils.UTF_8.name()));
-            FileUtils.deleteDirectory(tempDir);
-        }
-    }
-
-    @Test
-    public void testJsonRecursiveBatchIntegration() throws Exception {
-        File tempDir = File.createTempFile("tika-cli-test-batch-", "");
-        tempDir.delete();
-        tempDir.mkdir();
-        ByteArrayOutputStream outBuffer = new ByteArrayOutputStream();
-        PrintStream writer = new PrintStream(outBuffer, true, IOUtils.UTF_8.name());
-        OutputStream os = System.out;
-        System.setOut(writer);
-        Reader reader = null;
-        try {
-            String[] params = {"-i", escape(testDataFile.getAbsolutePath()),
-                    "-o", escape(tempDir.getAbsolutePath()),
-                    "-numConsumers", "10",
-                    "-J", //recursive Json
-                    "-t" //plain text in content
-            };
-            TikaCLI.main(params);
-            reader = new InputStreamReader(
-                    new FileInputStream(new File(tempDir, "test_recursive_embedded.docx.json")), IOUtils.UTF_8);
-            List<Metadata> metadataList = JsonMetadataList.fromJson(reader);
-            assertEquals(12, metadataList.size());
-            assertTrue(metadataList.get(6).get(RecursiveParserWrapper.TIKA_CONTENT).contains("human events"));
-        } finally {
-            IOUtils.closeQuietly(reader);
-            //reset in case something went horribly wrong
-            System.setOut(new PrintStream(os, true, IOUtils.UTF_8.name()));
-            FileUtils.deleteDirectory(tempDir);
-        }
-    }
-
-
-    public static String escape(String path) {
-        if (path.indexOf(' ') > -1){
-            return '"'+path+'"';
-        }
-        return path;
-    }
 }

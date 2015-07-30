@@ -121,7 +121,7 @@ public class ServiceLoader {
     private final LoadErrorHandler handler;
 
     private final boolean dynamic;
-
+    
     public ServiceLoader(
             ClassLoader loader, LoadErrorHandler handler, boolean dynamic) {
         this.loader = loader;
@@ -134,11 +134,13 @@ public class ServiceLoader {
     }
 
     public ServiceLoader(ClassLoader loader) {
-        this(loader, LoadErrorHandler.IGNORE);
+    	this(loader, Boolean.getBoolean("org.apache.tika.service.error.warn") 
+    			? LoadErrorHandler.WARN:LoadErrorHandler.IGNORE);
     }
 
     public ServiceLoader() {
-        this(getContextClassLoader(), LoadErrorHandler.IGNORE, true);
+    	this(getContextClassLoader(), Boolean.getBoolean("org.apache.tika.service.error.warn") 
+    			? LoadErrorHandler.WARN:LoadErrorHandler.IGNORE, true);
     }
 
     /**
@@ -207,7 +209,7 @@ public class ServiceLoader {
      *  service files.
      */
     public Enumeration<URL> findServiceResources(String filePattern) {
-       try {
+       try {    	  
           Enumeration<URL> resources = loader.getResources(filePattern);
           return resources;
        } catch (IOException ignore) {
@@ -218,8 +220,7 @@ public class ServiceLoader {
     }
 
     /**
-     * Returns all the available service providers of the given type
-     * that aren't blacklisted.
+     * Returns all the available service providers of the given type.
      *
      * @param iface service provider interface
      * @return available service providers
@@ -254,25 +255,11 @@ public class ServiceLoader {
                         providers.add((T) service.service);
                     }
                 }
-                return removeBlacklisted(providers, iface);
+                return providers;
             }
         } else {
             return new ArrayList<T>(0);
         }
-    }
-
-    private <T> List<T> removeBlacklisted(List<T> providers, Class<T> iface) {
-        List<T> blacklist = loadStaticServiceProvidersBlacklist(iface);
-        List<T> copy = new ArrayList<T>(providers);
-
-        for (T provider : copy) {
-            for (T blacklistedProvider : blacklist) {
-                if (blacklistedProvider.getClass().isAssignableFrom(provider.getClass())){
-                    providers.remove(provider);
-                }
-            }
-        }
-        return providers;
     }
 
     /**
@@ -305,68 +292,6 @@ public class ServiceLoader {
     }
 
     /**
-     * Returns the blacklisted static service providers of the given type, without
-     * attempting to load them.
-     * The providers are loaded using the service provider mechanism using
-     * the configured class loader (if any).
-     *
-     * @since Apache Tika 1.8
-     * @param iface service provider interface
-     * @return static list of uninitialised blacklisted service providers.
-     *
-     */
-    protected <T> List<String> identifyStaticServiceProvidersBlacklist(Class<T> iface) {
-        List<String> names = new ArrayList<String>();
-
-        if (loader != null) {
-            String fileName = iface.getName() + ".blacklist";
-            Enumeration<URL> resources =
-                    findServiceResources("META-INF/services/" + fileName);
-            for (URL resource : Collections.list(resources)) {
-                try {
-                    collectServiceClassNames(resource, names);
-                } catch (IOException e) {
-                    handler.handleLoadError(fileName, e);
-                }
-            }
-        }
-
-        return names;
-    }
-
-    /**
-     * Returns the available blacklisted static service providers of the given type.
-     * The providers are loaded using the service provider mechanism using
-     * the configured class loader (if any). The returned list is newly
-     * allocated and may be freely modified by the caller.
-     *
-     * @since Apache Tika 1.8
-     * @param iface service provider interface
-     * @return blacklisted static service providers
-     */
-    @SuppressWarnings("unchecked")
-    public <T> List<T> loadStaticServiceProvidersBlacklist(Class<T> iface) {
-        List<T> providers = new ArrayList<T>();
-
-        if (loader != null) {
-            List<String> names = identifyStaticServiceProvidersBlacklist(iface);
-
-            for (String name : names) {
-                try {
-                    Class<?> klass = loader.loadClass(name);
-                    if (iface.isAssignableFrom(klass)) {
-                        providers.add((T) klass.newInstance());
-                    }
-                } catch (Throwable t) {
-                    handler.handleLoadError(name, t);
-                }
-            }
-        }
-
-        return providers;
-    }
-
-    /**
      * Returns the available static service providers of the given type.
      * The providers are loaded using the service provider mechanism using
      * the configured class loader (if any). The returned list is newly
@@ -394,7 +319,7 @@ public class ServiceLoader {
                 }
             }
         }
-        return removeBlacklisted(providers, iface);
+        return providers;
     }
 
     private static final Pattern COMMENT = Pattern.compile("#.*");

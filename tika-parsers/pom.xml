@@ -25,7 +25,7 @@
   <parent>
     <groupId>org.apache.tika</groupId>
     <artifactId>tika-parent</artifactId>
-    <version>1.8-SNAPSHOT</version>
+    <version>1.10-SNAPSHOT</version>
     <relativePath>../tika-parent/pom.xml</relativePath>
   </parent>
 
@@ -35,7 +35,7 @@
   <url>http://tika.apache.org/</url>
 
   <properties>
-    <poi.version>3.12-beta1</poi.version>
+    <poi.version>3.13-beta1</poi.version>
     <codec.version>1.9</codec.version>
     <!-- NOTE: sync with POI -->
     <compress.version>1.9</compress.version>
@@ -43,7 +43,7 @@
     <!-- NOTE: sync with commons-compress -->
     <mime4j.version>0.7.2</mime4j.version>
     <vorbis.version>0.6</vorbis.version>
-    <pdfbox.version>1.8.9</pdfbox.version>
+    <pdfbox.version>1.8.10</pdfbox.version>
     <netcdf-java.version>4.5.5</netcdf-java.version>
   </properties>
 
@@ -76,6 +76,22 @@
       <groupId>org.gagravarr</groupId>
       <artifactId>vorbis-java-tika</artifactId>
       <version>${vorbis.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.healthmarketscience.jackcess</groupId>
+      <artifactId>jackcess</artifactId>
+      <version>2.1.2</version>
+    </dependency>
+    <dependency>
+      <groupId>com.healthmarketscience.jackcess</groupId>
+      <artifactId>jackcess-encrypt</artifactId>
+      <version>2.1.0</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.bouncycastle</groupId>
+          <artifactId>bcprov-jdk15</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
 
     <!-- Optional OSGi dependencies, used only when running within OSGi -->
@@ -127,13 +143,13 @@
          problems with encrypted PDFs. -->
     <dependency>
       <groupId>org.bouncycastle</groupId>
-      <artifactId>bcmail-jdk15</artifactId>
-      <version>1.45</version>
+      <artifactId>bcmail-jdk15on</artifactId>
+      <version>1.52</version>
     </dependency>
     <dependency>
       <groupId>org.bouncycastle</groupId>
-      <artifactId>bcprov-jdk15</artifactId>
-      <version>1.45</version>
+      <artifactId>bcprov-jdk15on</artifactId>
+      <version>1.52</version>
     </dependency>
     <dependency>
       <groupId>org.apache.poi</groupId>
@@ -178,7 +194,7 @@
     <dependency>
       <groupId>com.drewnoakes</groupId>
       <artifactId>metadata-extractor</artifactId>
-      <version>2.7.2</version>
+      <version>2.8.0</version>
     </dependency>
     <dependency>
       <groupId>de.l3s.boilerpipe</groupId>
@@ -194,11 +210,6 @@
       <groupId>org.gagravarr</groupId>
       <artifactId>vorbis-java-core</artifactId>
       <version>${vorbis.version}</version>
-    </dependency>
-    <dependency>
-        <groupId>org.xerial</groupId>
-        <artifactId>sqlite-jdbc</artifactId>
-        <version>3.8.6</version> <!-- 3.8.7 failed on Ubuntu -->
     </dependency>
     <dependency>
       <groupId>com.googlecode.juniversalchardet</groupId>
@@ -219,6 +230,44 @@
       <groupId>com.github.junrar</groupId>
       <artifactId>junrar</artifactId>
       <version>0.7</version>
+    </dependency>
+
+    <!-- Provided dependencies -->
+    <dependency>
+      <groupId>org.xerial</groupId>
+      <artifactId>sqlite-jdbc</artifactId>
+      <version>3.8.10.1</version> 
+      <scope>provided</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.opennlp</groupId>
+      <artifactId>opennlp-tools</artifactId>
+      <version>1.5.3</version>
+    </dependency>
+
+    <dependency>
+      <groupId>commons-io</groupId>
+      <artifactId>commons-io</artifactId>
+      <version>2.4</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-exec</artifactId>
+      <version>1.3</version>
+    </dependency>
+
+    <dependency>
+      <groupId>com.googlecode.json-simple</groupId>
+      <artifactId>json-simple</artifactId>
+      <version>1.1.1</version>
+      <exclusions>
+        <exclusion>
+          <groupId>junit</groupId>
+          <artifactId>junit</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
 
     <!-- Test dependencies -->
@@ -264,17 +313,45 @@
       <groupId>edu.ucar</groupId>
       <artifactId>httpservices</artifactId>
       <version>${netcdf-java.version}</version>
-   </dependency>
-   <dependency>
+    </dependency>
+    <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
-      <version>10.0.1</version>
+      <version>11.0.2</version>
     </dependency>
     <!-- Apache Commons CSV -->
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-csv</artifactId>
       <version>1.0</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.sis.core</groupId>
+      <artifactId>sis-utility</artifactId>
+      <version>0.5</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.sis.storage</groupId>
+      <artifactId>sis-netcdf</artifactId>
+      <version>0.5</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.sis.core</groupId>
+      <artifactId>sis-metadata</artifactId>
+      <version>0.5</version>
+    </dependency>
+    <dependency>
+      <groupId>org.opengis</groupId>
+      <artifactId>geoapi</artifactId>
+      <version>3.0.0</version>
+    </dependency>
+    <!-- Apache cTAKES -->
+    <dependency>
+      <groupId>org.apache.ctakes</groupId>
+      <artifactId>ctakes-core</artifactId>
+      <version>3.2.2</version>
+      <scope>provided</scope>
     </dependency>
   </dependencies>
 

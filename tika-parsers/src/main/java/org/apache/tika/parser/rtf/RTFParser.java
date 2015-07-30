@@ -36,53 +36,53 @@ import org.xml.sax.SAXException;
  */
 public class RTFParser extends AbstractParser {
 
-    /** Serial version UID */
+    /**
+     * Serial version UID
+     */
     private static final long serialVersionUID = -4165069489372320313L;
 
     private static final Set<MediaType> SUPPORTED_TYPES =
             Collections.singleton(MediaType.application("rtf"));
-
-    public Set<MediaType> getSupportedTypes(ParseContext context) {
-        return SUPPORTED_TYPES;
-    }
-
-    /** maximum number of bytes per embedded object/pict (default: 20MB)*/
-    private static int EMB_OBJ_MAX_BYTES = 20*1024*1024; //20MB
-
     /**
-     * Bytes for embedded objects are currently cached in memory.  
-     * If something goes wrong during the parsing of an embedded object, 
-     * it is possible that a read length may be crazily too long 
-     * and cause a heap crash.
-     *  
-     * @param max maximum number of bytes to allow for embedded objects.  If 
-     * the embedded object has more than this number of bytes, skip it.
+     * maximum number of bytes per embedded object/pict (default: 20MB)
      */
-    public static void setMaxBytesForEmbeddedObject(int max) {
-        EMB_OBJ_MAX_BYTES = max;
-    }
-    
+    private static int EMB_OBJ_MAX_BYTES = 20 * 1024 * 1024; //20MB
+
     /**
      * See {@link #setMaxBytesForEmbeddedObject(int)}.
-     * 
+     *
      * @return maximum number of bytes allowed for an embedded object.
-     * 
      */
     public static int getMaxBytesForEmbeddedObject() {
         return EMB_OBJ_MAX_BYTES;
     }
 
+    /**
+     * Bytes for embedded objects are currently cached in memory.
+     * If something goes wrong during the parsing of an embedded object,
+     * it is possible that a read length may be crazily too long
+     * and cause a heap crash.
+     *
+     * @param max maximum number of bytes to allow for embedded objects.  If
+     *            the embedded object has more than this number of bytes, skip it.
+     */
+    public static void setMaxBytesForEmbeddedObject(int max) {
+        EMB_OBJ_MAX_BYTES = max;
+    }
+
+    public Set<MediaType> getSupportedTypes(ParseContext context) {
+        return SUPPORTED_TYPES;
+    }
+
     public void parse(
             InputStream stream, ContentHandler handler,
             Metadata metadata, ParseContext context)
-        throws IOException, SAXException, TikaException {
+            throws IOException, SAXException, TikaException {
         TaggedInputStream tagged = new TaggedInputStream(stream);
         try {
-            RTFEmbObjHandler embObjHandler = new RTFEmbObjHandler(handler,
-                    metadata, context);
-            final TextExtractor ert = 
-                    new TextExtractor(new XHTMLContentHandler(handler, 
-                    metadata), metadata, embObjHandler);
+            XHTMLContentHandler xhtmlHandler = new XHTMLContentHandler(handler, metadata);
+            RTFEmbObjHandler embObjHandler = new RTFEmbObjHandler(xhtmlHandler, metadata, context);
+            final TextExtractor ert = new TextExtractor(xhtmlHandler, metadata, embObjHandler);
             ert.extract(stream);
             metadata.add(Metadata.CONTENT_TYPE, "application/rtf");
         } catch (IOException e) {

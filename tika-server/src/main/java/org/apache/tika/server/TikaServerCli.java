@@ -38,26 +38,31 @@ import org.apache.cxf.jaxrs.lifecycle.SingletonResourceProvider;
 import org.apache.cxf.rs.security.cors.CrossOriginResourceSharingFilter;
 import org.apache.tika.Tika;
 import org.apache.tika.config.TikaConfig;
+import org.apache.tika.parser.DigestingParser;
+import org.apache.tika.parser.utils.CommonsDigester;
 import org.apache.tika.server.resource.DetectorResource;
+import org.apache.tika.server.resource.LanguageResource;
 import org.apache.tika.server.resource.MetadataResource;
 import org.apache.tika.server.resource.RecursiveMetadataResource;
-import org.apache.tika.server.writer.TarWriter;
 import org.apache.tika.server.resource.TikaDetectors;
 import org.apache.tika.server.resource.TikaMimeTypes;
 import org.apache.tika.server.resource.TikaParsers;
 import org.apache.tika.server.resource.TikaResource;
 import org.apache.tika.server.resource.TikaVersion;
 import org.apache.tika.server.resource.TikaWelcome;
+import org.apache.tika.server.resource.TranslateResource;
 import org.apache.tika.server.resource.UnpackerResource;
 import org.apache.tika.server.writer.CSVMessageBodyWriter;
 import org.apache.tika.server.writer.JSONMessageBodyWriter;
 import org.apache.tika.server.writer.MetadataListMessageBodyWriter;
+import org.apache.tika.server.writer.TarWriter;
 import org.apache.tika.server.writer.TextMessageBodyWriter;
 import org.apache.tika.server.writer.XMPMessageBodyWriter;
 import org.apache.tika.server.writer.ZipWriter;
 
 public class TikaServerCli {
     public static final int DEFAULT_PORT = 9998;
+    private static final int DEFAULT_DIGEST_MARK_LIMIT = 20*1024*1024;
     public static final String DEFAULT_HOST = "localhost";
     public static final Set<String> LOG_LEVELS =
             new HashSet<String>(Arrays.asList("debug", "info"));
@@ -65,9 +70,12 @@ public class TikaServerCli {
 
     private static Options getOptions() {
         Options options = new Options();
-        options.addOption("c", "cors", true, "origin allowed to make CORS requests (default=NONE)\nall allowed if \"all\"");
+        options.addOption("C", "cors", true, "origin allowed to make CORS requests (default=NONE)\nall allowed if \"all\"");
         options.addOption("h", "host", true, "host name (default = " + DEFAULT_HOST + ')');
         options.addOption("p", "port", true, "listen port (default = " + DEFAULT_PORT + ')');
+        options.addOption("c", "config", true, "Tika Configuration file to override default config with.");
+        options.addOption("d", "digest", true, "include digest in metadata, e.g. md5,sha256");
+        options.addOption("dml", "digestMarkLimit", true, "max number of bytes to mark on stream for digest");
         options.addOption("l", "log", true, "request URI log level ('debug' or 'info')");
         options.addOption("s", "includeStack", false, "whether or not to return a stack trace\nif there is an exception during 'parse'");
         options.addOption("?", "help", false, "this help message");
@@ -127,24 +135,52 @@ public class TikaServerCli {
                 if (!url.equals("*")) origins.add(url);         // Empty list allows all origins.
                 corsFilter.setAllowOrigins(origins);
             }
+            
+            // The Tika Configuration to use throughout            
+            TikaConfig tika;
+            
+            if (line.hasOption("config")){
+              String configFilePath = line.getOptionValue("config");
+	      logger.info("Using custom config: "+configFilePath);
+              tika = new TikaConfig(configFilePath);
+            }
+            else{
+              tika = TikaConfig.getDefaultConfig();
+            }
 
-            // The Tika Configuration to use throughout
-            TikaConfig tika = TikaConfig.getDefaultConfig();
+            DigestingParser.Digester digester = null;
+            if (line.hasOption("digest")){
+                int digestMarkLimit = DEFAULT_DIGEST_MARK_LIMIT;
+                if (line.hasOption("dml")) {
+                    String dmlS = line.getOptionValue("dml");
+                    try {
+                        digestMarkLimit = Integer.parseInt(dmlS);
+                    } catch (NumberFormatException e) {
+                        throw new RuntimeException("Must have parseable int after digestMarkLimit(dml): "+dmlS);
+                    }
+                }
+                digester = new CommonsDigester(digestMarkLimit,
+                        CommonsDigester.parse(line.getOptionValue("digest")));
+            }
 
+
+            TikaResource.init(tika, digester);
             JAXRSServerFactoryBean sf = new JAXRSServerFactoryBean();
 
             List<ResourceProvider> rCoreProviders = new ArrayList<ResourceProvider>();
-            rCoreProviders.add(new SingletonResourceProvider(new MetadataResource(tika)));
-            rCoreProviders.add(new SingletonResourceProvider(new RecursiveMetadataResource(tika)));
-            rCoreProviders.add(new SingletonResourceProvider(new DetectorResource(tika)));
-            rCoreProviders.add(new SingletonResourceProvider(new TikaResource(tika)));
-            rCoreProviders.add(new SingletonResourceProvider(new UnpackerResource(tika)));
-            rCoreProviders.add(new SingletonResourceProvider(new TikaMimeTypes(tika)));
-            rCoreProviders.add(new SingletonResourceProvider(new TikaDetectors(tika)));
-            rCoreProviders.add(new SingletonResourceProvider(new TikaParsers(tika)));
-            rCoreProviders.add(new SingletonResourceProvider(new TikaVersion(tika)));
+            rCoreProviders.add(new SingletonResourceProvider(new MetadataResource()));
+            rCoreProviders.add(new SingletonResourceProvider(new RecursiveMetadataResource()));
+            rCoreProviders.add(new SingletonResourceProvider(new DetectorResource()));
+            rCoreProviders.add(new SingletonResourceProvider(new LanguageResource()));
+            rCoreProviders.add(new SingletonResourceProvider(new TranslateResource()));
+            rCoreProviders.add(new SingletonResourceProvider(new TikaResource()));
+            rCoreProviders.add(new SingletonResourceProvider(new UnpackerResource()));
+            rCoreProviders.add(new SingletonResourceProvider(new TikaMimeTypes()));
+            rCoreProviders.add(new SingletonResourceProvider(new TikaDetectors()));
+            rCoreProviders.add(new SingletonResourceProvider(new TikaParsers()));
+            rCoreProviders.add(new SingletonResourceProvider(new TikaVersion()));
             List<ResourceProvider> rAllProviders = new ArrayList<ResourceProvider>(rCoreProviders);
-            rAllProviders.add(new SingletonResourceProvider(new TikaWelcome(tika, rCoreProviders)));
+            rAllProviders.add(new SingletonResourceProvider(new TikaWelcome(rCoreProviders)));
             sf.setResourceProviders(rAllProviders);
 
             List<Object> providers = new ArrayList<Object>();

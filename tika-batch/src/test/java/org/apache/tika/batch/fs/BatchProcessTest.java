@@ -17,10 +17,10 @@ package org.apache.tika.batch.fs;
  */
 
 
-import static junit.framework.TestCase.assertEquals;
-import static junit.framework.TestCase.fail;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.File;
 import java.io.IOException;
@@ -263,6 +263,33 @@ public class BatchProcessTest extends FSBatchTestBase {
         StreamStrings streamStrings = ex.execute();
         assertEquals(BatchProcessDriverCLI.PROCESS_NO_RESTART_EXIT_CODE, ex.getExitValue());
         assertContains("ConsumersManager did not shutdown within", streamStrings.getOutString());
+    }
+
+    @Test
+    public void testHierarchicalWFileList() throws Exception {
+        //tests to make sure that hierarchy is maintained when reading from
+        //file list
+        //also tests that list actually works.
+        File outputDir = getNewOutputDir("hierarchical_file_list");
+
+        Map<String, String> args = getDefaultArgs("hierarchical", outputDir);
+        args.put("numConsumers", "1");
+        args.put("fileList", this.getClass().getResource("/testFileList.txt").getPath());
+        args.put("recursiveParserWrapper", "true");
+        args.put("basicHandlerType", "text");
+        args.put("outputSuffix", "json");
+        BatchProcessTestExecutor ex = new BatchProcessTestExecutor(args, "/tika-batch-config-MockConsumersBuilder.xml");
+        ex.execute();
+        File test1 = new File(outputDir, "test1.xml.json");
+        File test2 = new File(outputDir, "sub1a/test2.xml.json");
+        File test3 = new File(outputDir, "sub1a/sub2a/test3.xml.json");
+        assertTrue("test1 exists", test1.exists());
+        assertTrue("test1 length > 10", test1.length() > 10);
+        assertTrue(test3.exists() && test3.length() > 10);
+        File test2Dir = new File(outputDir, "sub1a");
+        //should be just the subdirectory, no actual test2 file
+        assertEquals(1, test2Dir.listFiles().length);
+        assertFalse(test2.exists());
     }
 
     private class BatchProcessTestExecutor {
